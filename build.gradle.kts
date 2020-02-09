@@ -1,12 +1,8 @@
 import com.diffplug.spotless.FormatterStep
-import com.github.spotbugs.SpotBugsTask
-import com.github.spotbugs.SpotBugsExtension
 import org.gradle.api.Project
-import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.jvm.tasks.Jar
 import org.gradle.testing.jacoco.tasks.JacocoReport
 import java.time.Instant
-import org.jfrog.gradle.plugin.artifactory.dsl.PublisherConfig
 import groovy.lang.GroovyObject
 
 buildscript {
@@ -16,14 +12,12 @@ buildscript {
     }
 }
 plugins {
-    `maven-publish`
     jacoco
     id("edu.wpi.first.wpilib.versioning.WPILibVersioningPlugin") version "4.0.1"
     id("edu.wpi.first.wpilib.repositories.WPILibRepositoriesPlugin") version "2020.1"
     id("com.jfrog.artifactory") version "4.9.8"
     id("com.github.johnrengelman.shadow") version "4.0.3"
     id("com.diffplug.gradle.spotless") version "3.13.0"
-    id("com.github.spotbugs") version "1.6.4"
     id("com.google.osdetector") version "1.4.0"
 }
 
@@ -54,25 +48,6 @@ allprojects {
     apply {
         plugin("com.diffplug.gradle.spotless")
         plugin("com.jfrog.artifactory")
-    }
-
-    if (System.getenv()["RUN_AZURE_ARTIFACTORY_RELEASE"] != null) {
-        artifactory {
-            setContextUrl("https://frcmaven.wpi.edu/artifactory") // base artifactory url
-            publish(delegateClosureOf<PublisherConfig> {
-                repository(delegateClosureOf<GroovyObject> {
-                    if (project.hasProperty("releaseMode")) {
-                        setProperty("repoKey", "release")
-                    } else {
-                        setProperty("repoKey", "development")
-                    }
-                    setProperty("username", System.getenv()["ARTIFACTORY_PUBLISH_USERNAME"])
-                    setProperty("password", System.getenv()["ARTIFACTORY_PUBLISH_PASSWORD"])
-                    setProperty("maven", true)
-                })
-            })
-            clientConfig.info.setBuildName("Shuffleboard")
-        }
     }
 
     version = projectVersion
@@ -148,9 +123,7 @@ allprojects {
         plugin("java")
         plugin("checkstyle")
         plugin("pmd")
-        plugin("com.github.spotbugs")
         plugin("jacoco")
-        plugin("maven-publish")
     }
     repositories {
         mavenCentral()
@@ -191,39 +164,12 @@ allprojects {
         ruleSetFiles = files(file("$rootDir/pmd-ruleset.xml"))
         ruleSets = emptyList()
     }
-
-    spotbugs {
-        toolVersion = "3.1.7"
-        sourceSets = setOf(java.sourceSets["main"], java.sourceSets["test"])
-        excludeFilter = file("$rootDir/findBugsSuppressions.xml")
-        effort = "max"
-    }
-
+    
     tasks.withType<JavaCompile> {
         // UTF-8 characters are used in menus
         options.encoding = "UTF-8"
     }
-
-    tasks.withType<SpotBugsTask> {
-        reports {
-            xml.isEnabled = false
-            emacs.isEnabled = true
-        }
-        finalizedBy(task("${name}Report") {
-            mustRunAfter(this@withType)
-            doLast {
-                this@withType
-                        .reports
-                        .emacs
-                        .destination
-                        .takeIf { it.exists() }
-                        ?.readText()
-                        .takeIf { !it.isNullOrBlank() }
-                        ?.also { logger.warn(it) }
-            }
-        })
-    }
-
+    
     jacoco {
         toolVersion = "0.8.2"
     }
@@ -263,30 +209,6 @@ project(":api") {
         classifier = "javadoc"
     }
 
-    if (System.getenv()["RUN_AZURE_ARTIFACTORY_RELEASE"] != null) {
-        artifactory {
-            publish(delegateClosureOf<PublisherConfig> {
-                defaults(delegateClosureOf<GroovyObject> {
-                    invokeMethod("publications", "api")
-                })
-            })
-        }
-    }
-
-    publishing {
-        publications {
-            create<MavenPublication>("api") {
-                groupId = "edu.wpi.first.shuffleboard"
-                artifactId = "api"
-                version = project.version.toString()
-                afterEvaluate {
-                    from(components["java"])
-                }
-                artifact(sourceJar)
-                artifact(javadocJar)
-            }
-        }
-    }
 }
 
 tasks.withType<Wrapper>().configureEach {
@@ -325,10 +247,3 @@ val Project.`pmd`: org.gradle.api.plugins.quality.PmdExtension
  */
 fun Project.`pmd`(configure: org.gradle.api.plugins.quality.PmdExtension.() -> Unit) =
         extensions.configure("pmd", configure)
-
-val Project.`spotbugs`: SpotBugsExtension
-    get() =
-        extensions.getByName("spotbugs") as SpotBugsExtension
-
-fun Project.`spotbugs`(configure: SpotBugsExtension.() -> Unit) =
-        extensions.configure("spotbugs", configure)

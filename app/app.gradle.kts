@@ -1,6 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.jvm.tasks.Jar
-import org.jfrog.gradle.plugin.artifactory.dsl.PublisherConfig
 import groovy.lang.GroovyObject
 
 plugins {
@@ -8,7 +7,6 @@ plugins {
 }
 apply {
     plugin("com.github.johnrengelman.shadow")
-    plugin("maven-publish")
 }
 
 description = """
@@ -87,30 +85,7 @@ tasks.withType<ShadowJar>().configureEach {
     exclude("module-info.class")
 }
 
-if (System.getenv()["RUN_AZURE_ARTIFACTORY_RELEASE"] != null) {
-    artifactory {
-        publish(delegateClosureOf<PublisherConfig> {
-            defaults(delegateClosureOf<GroovyObject> {
-                invokeMethod("publications", "app")
-            })
-        })
-    }
-}
 
-publishing {
-    publications {
-        create<MavenPublication>("app") {
-            groupId = "edu.wpi.first.shuffleboard"
-            artifactId = "shuffleboard"
-            version = project.version as String
-            nativeShadowTasks.forEach {
-                artifact(it) {
-                    classifier = it.classifier
-                }
-            }
-        }
-    }
-}
 
 /**
  * Lets tests use the output of the test_plugins build.
